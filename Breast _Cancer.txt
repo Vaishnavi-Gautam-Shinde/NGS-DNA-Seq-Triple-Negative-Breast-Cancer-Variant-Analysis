@@ -1,0 +1,102 @@
+##DNA Seq Breast Cancer Analysis#
+#Taiwanese female Breast tissue sample (Single Dataset)
+#SRA ID-SRX28933767
+# Sample ID-SRR33708289
+# Library-TH80(OCP)
+
+
+# Step 1: Data Downloading 
+# Copied accession no. from NCBI
+# Pasted it into ENA and got its link over here 
+# single end dataset
+
+ wget -c ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR337/089/SRR33708289/SRR33708289.fastq.gz #1st loaded showing unloaded after trimming 
+ # -c = connectivity
+
+
+# Step 2: Extraction of Data 
+gunzip *.gz
+
+# Step 3: Quality Check --- fastqc
+
+sudo apt-get install fastqc   #fastqc installation
+fastqc --version              #for fastqc installed checking 
+
+fastqc *.fastq                #quality checking, gives 2 output files, folder and html web page for a particular file.
+
+# 3 Imp parameters of Fastqc
+#1. Per base sequence quality
+#2. overrepresented sequences
+#3. Adapter Content
+
+
+# step 4: Data Trimming
+#per base sequence quality
+#Trimming isn't required for this dataset.
+
+#step5: isn't necessary here 
+
+#step6: Downloading of reference genome
+
+wget -c https://hgdownload.gi.ucsc.edu/goldenPath/hg38/chromosomes/chr17.fa.gz
+gunzip *.gz
+wget -c https://hgdownload.gi.ucsc.edu/goldenPath/hg38/chromosomes/chr13.fa.gz
+gunzip *.gz
+
+
+# Need to combine both reference genome (chr) files
+cat chr13.fa chr17.fa > genome.fa
+
+#Step 7 : Mapping of reads with reference genome
+1) Indexing of the reference genome:
+bwa index -a bwtsw genome.fa
+
+
+# 2) Aligning of the reads with reference genome:
+
+bwa mem -t 2 genome.fa SRR33708289.fastq > bwa_SRR33708289.bam
+
+samtools sort bwa_SRR33708289.bam > sorted_SRR33708289.bam
+
+
+#step8:convert bam into sam file by using samtools ---this is optional
+
+samtools view sorted_SRR33708289.bam > sorted_SRR33708289.sam
+
+#Compulsory step of conversion bam to sam file to read & check the data in human readable format.
+
+#Step 9: Removing Duplicates
+samtools rmdup -sS sorted_SRR33708289.bam rmdup_SRR33708289.bam
+
+#Output:[bam_rmdupse_core] 709127 / 741800 = 0.9560 in library '
+
+#Step 10: Variant Calling step (GATK)
+#A. Conversion of genome file into picard tools format
+picard-tools #Checking
+picard-tools CreateSequenceDictionary R=genome.fa O=genome.dict
+
+#B. Conversion of unique BAM files into picard tools format
+picard-tools AddOrReplaceReadGroups I=rmdup_SRR33708289.bam O=picard_output.bam RGLB=lib1 RGPL=ION_TORRENT RGPU=run RGSM=SRR33708289 SORT_ORDER=coordinate CREATE_INDEX=true VALIDATION_STRINGENCY=LENIENT
+
+#C. Variation calling using GATK(HaplotypeCaller= germline variations , mutect2 = somatic variation)
+#Haplotec and Mutec Algorithms  of the GATK.
+
+samtools faidx genome.fa  #indexing 
+
+#open & extract the gatk folder
+#open terminal from their 
+pwd
+#copy the path of gatk and paste in below command
+
+java -jar /mnt/d/Vaishu_New_Folder/NGS/DNA_Seq_Breast_Cancer/gatk-4.3.0.0/gatk-4.3.0.0/gatk-package-4.3.0.0-local.jar HaplotypeCaller -R genome.fa -I picard_output.bam -O GATK_output.vcf 
+
+#Annotation  of variants using snpEff
+java -Xmx2g -jar /mnt/d/Vaishu_New_Folder/NGS/DNA_Seq_Breast_Cancer/snpEff_latest_core/snpEff/snpEff.jar hg38 GATK_output.vcf > snpEff_annotation.vcf
+
+# filtering potentially harmful variants from annotated vcf.
+ grep -E "frameshift_variant|stop_gained|missense_variant|HIGH|MODERATE" snpEff_annotation.vcf > important_variants.vcf
+
+
+
+
+
